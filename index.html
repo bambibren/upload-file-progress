@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="iconfont.css">
+
+    <script src="./static/vue.js"></script>
+    <script src="./static/jquery-1.11.1.js"></script>
+
+    <script>
+    //   tinymce.init({
+    //     selector: '#mytextarea',
+    //     font_formats: '微软雅黑=Microsoft YaHei,Helvetica Neue,PingFang SC,sans-serif;苹果苹方=PingFang SC,Microsoft YaHei,sans-serif;宋体=simsun,serif',
+    //     plugins: 'image textcolor paste fullscreen',
+    //     menubar: false,
+    //     toolbar: 'undo redo | fontselect fontsizeselect styleselect | bold italic underline forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | image | fullscreen',
+    //     setup: function (editor) {
+    //         editor.on('change', function () {
+    //             editor.save();
+    //         });
+    //     }
+    //   });
+    </script>
+    <link rel="stylesheet" type="text/css" id="u0" referrerpolicy="origin" href="./static/skins/ui/oxide/skin.min.css">
+    <style>
+        ul {
+            background-color: #f2f2f2;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+            padding-left: 0;
+        }
+        ul::before {
+            content: 'Attachment';
+            height: 32px;
+            line-height: 32px;
+            display: block;
+            padding-left: 11px;
+        }
+        ul li.file_item {
+            margin-bottom: 1px;
+        }
+        ul li {
+            list-style: none;
+            position: relative;
+            background-color: #fff;
+            height: 32px;
+            padding-left: 11px;
+            overflow: hidden; /* 解决margin塌陷 */
+        }
+        ul li .file_name {
+            font-size: 14px;
+            color: #111;
+            font-weight: bolder;
+            line-height: 32px;
+            position: absolute;
+        }
+        ul li .del {
+            position: absolute;
+            right: 8px;
+            top: 6px;
+            font-size: 19.8px;
+            width: 19.8px;
+            height: 19.8px;
+            cursor: pointer;
+            padding: 0;
+            border: 0;
+            color: #666;
+        }
+        .progress_bar {
+            background-color: #fff;
+            border-radius: 100px;
+            overflow: hidden;
+          margin: 12px 166px 12px 206px;
+          border: 1px solid #ddd;
+          line-height: 8px;
+          height: 8px;
+          /* font-size: 14px; */
+          clear: both;
+          opacity: 1;
+          -moz-transition: opacity 1s linear;
+          -o-transition: opacity 1s linear;
+          -webkit-transition: opacity 1s linear;
+        }
+        .progress_bar.loading {
+          opacity: 1.0;
+        }
+        .progress_bar .percent, .progress_bar .upload {
+          background-color: #aaa;
+          height: 100%;
+          width: 0;
+        }
+      </style>
+  </head>
+
+  <body>
+    <div id="app">
+        <ul>
+            <li v-for="(file, n) in files" v-show="file.readPercent" class="file_item">
+                <span class="file_name" v-if="!file.fileName">
+                    文件读取中...
+                </span>
+                <span class="file_name" v-else>
+                    {{ file.fileName }}({{ file.uploadSize}})
+                </span>
+                <div class="progress_bar" v-show="file.readPercent !== '100%'">
+                    <div :class="['percent', 'bar' + n]" :style="'width:' + file.readPercent"></div>
+                </div>
+                <div class="progress_bar" v-show="file.uploadPercent !== '100%'">
+                    <div :class="['upload', 'bar' + n]" :style="'width:' + file.uploadPercent"></div>
+                </div>
+                <button @click="del(n)" class="del iconfont icon-delete" v-show="file.uploadPercent === '100%'"></button>  
+            </li>
+            <li>
+                <input type="file" name="file" id="file" ref="file" @change="handleFileSelect" v-show="false"/>
+                <label for="file" style="color: #4C84FF;font-size: 14px;line-height: 32px;cursor: pointer;">Add attachment</label>
+            </li>
+        </ul>
+    </div>
+  </body>
+  <script>
+    let app = new Vue({
+        el: '#app',
+        data: {
+            files: []
+        },
+        methods: {
+            del(n) {
+                this.files.splice(n, 1)
+            },
+            clearFile() {
+                this.$refs.file.value = ''
+            },
+            getFile(target) {
+                if (!target.files[0]) return;
+                let filevalue = target.value;
+                let index = filevalue.lastIndexOf('.');
+                let file = {}
+                file.fileName = target.files[0].name
+                file.filesExtension = filevalue.substring(index)
+                let self = this
+                this.readFile(target.files[0]).then(res => {
+                    file.fileData = res
+                    Object.assign(self.files[self.files.length - 1], {
+                        fileName: file.fileName, // 文件名
+                        filesExtension: file.filesExtension, // 扩展名
+                        fileData: file.fileData,
+                        readPercent: '100%'
+                    })
+                    self.upload(target.files[0])
+                    self.$forceUpdate()
+                }).catch(e => {
+                    console.log(e)
+                })
+            },
+            readFile(file) {
+                let self = this;
+                return new Promise(function(resolve, reject) {
+                    let fileCard = self.files[self.files.length - 1];
+                    
+                    // 在选择新文件后重置进度指示器
+                    self.$set(fileCard, 'readPercent', '0%');
+                
+                    let reader = new FileReader();
+
+                    reader.onprogress = self.updateProgress; // 更新进度条
+                    reader.onerror = function (e) {
+                        switch(e.target.error.code) {
+                            case e.target.error.NOT_FOUND_ERR:
+                                reject('文件没找到');
+                                break;
+                            case e.target.error.NOT_READABLE_ERR:
+                                reject('文件不可读');
+                                break;
+                            default:
+                                reject('读取文件时出错');
+                        };
+                    }
+                    reader.onloadend = function (res) {
+                        // 确保进度条最后显示100％
+                        self.$set(fileCard, 'readPercent', '100%');
+                        resolve(res.target.result)
+                    }
+                
+                    // 将文件作为二进制字符串读入
+                    reader.readAsArrayBuffer(file);
+                })
+            },
+            handleFileSelect(e) {
+                // 加入this.files
+                this.files.push({})
+                this.$nextTick(tick=>{
+                    this.getFile(e.target)
+                    // this.getFileOnly(e.target)
+                })
+            },
+            updateProgress(e) {
+                // e 是一个 ProgressEvent.
+                if (e.lengthComputable) {
+                    let percentLoaded = ((e.loaded / e.total) * 100).toFixed(2);
+                    let fileCard = this.files[this.files.length - 1];
+                    this.$set(fileCard, 'fileSize', this.renderSize(e.loaded))
+                    // 更新进度条长度
+                    if (percentLoaded < 100) {
+                    this.$set(fileCard, 'readPercent', percentLoaded+ '%');
+                    }
+                }
+            },
+            renderSize(value){
+               if(null==value||value==''){
+                   return "0 Bytes";
+               }
+                let unitArr = new Array("Bytes","KB","MB","GB","TB","PB","EB","ZB","YB");
+                let index=0;
+                let srcsize = parseFloat(value);
+                index=Math.floor(Math.log(srcsize)/Math.log(1024));
+                let size =srcsize/Math.pow(1024,index);
+                size=size.toFixed(2);//保留的小数位数
+                return size+unitArr[index];
+            },
+            upload(fileObj) {
+                let formFile = new FormData();
+                formFile.append("attachment", fileObj); //加入文件对象
+
+                let fileCard = this.files[this.files.length - 1];
+                $.ajax({
+                    url: window.location.origin + '/upload',
+                    data: formFile,
+                    type: "post",
+                    dataType: "json",
+                    cache: false,//上传文件无需缓存
+                    processData: false,//用于对data参数进行序列化处理 这里必须false
+                    contentType: false, //必须
+                    xhr: () => {
+                        let xhr = $.ajaxSettings.xhr();
+                        if (xhr.upload) {
+                            xhr.upload.onprogress = (e) => {
+                                let percent=e.loaded/e.total;//文件上传百分比
+                                if (percent <= 1) {
+                                    this.$set(fileCard, 'uploadPercent', (percent * 100).toFixed(2) + '%')
+                                    this.$set(fileCard, 'uploadSize', this.renderSize(e.loaded))
+                                }
+                            };
+                        }
+                        return xhr;
+                    },
+                    error: (error) => {
+                        console.log(error)
+                    },
+                    success: (result) => {
+                        this.$set(fileCard, 'uploadPercent', '100%')
+                        this.$set(fileCard, 'filePath', result.file.filepath)
+                    },
+                    complete: ()=> {
+                        this.clearFile()
+                    }
+                })
+            }
+        }
+    })
+</script>
+</html>
