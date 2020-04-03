@@ -194,7 +194,7 @@
                if(null==value||value==''){
                    return "0 Bytes";
                }
-                let unitArr = new Array("Bytes","KB","MB","GB","TB","PB","EB","ZB","YB");
+                let unitArr = new Array("Bytes","KiB","MiB","GiB","TiB","PiB","EiB","ZiB","YiB");
                 let index=0;
                 let srcsize = parseFloat(value);
                 index=Math.floor(Math.log(srcsize)/Math.log(1024));
